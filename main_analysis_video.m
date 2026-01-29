@@ -9,13 +9,15 @@ fprintf(['Read video: ' filename '\n']);
 vid_obj = VideoReader(filename);
 
 num_frames=vid_obj.NumFrames;
-num_features = 6;
+num_features = 10;
 num_stats = 8;
 
 features_time = NaN(num_frames, num_features); % features by frames
 feature_stats = NaN(num_stats, num_features); % stats of features
 
 prev_centroid = NaN(1,2);
+prev_row_end = NaN;
+prev_col_end = NaN;
 
 i=1;
 while hasFrame(vid_obj)
@@ -89,6 +91,13 @@ while hasFrame(vid_obj)
     subplot(1,4,2);
     imagesc(ROIrot);
     
+    col_counts = sum(ROIrot~=0, 1); % non zero elements per column
+    col_counts_nz = col_counts(col_counts > 0); % at least one element per column
+
+    width_max    = max(col_counts_nz);
+    width_mean   = mean(col_counts_nz);
+    width_median = median(col_counts_nz);
+    
     % Measure bounding box after rotation
     statsrot = regionprops(logical(ROIrot), 'BoundingBox');
 
@@ -112,12 +121,26 @@ while hasFrame(vid_obj)
     hold off
     
     endpoint_distance = NaN;
-    if numel(row_end) == 2   % have exactly two endpoints
+    endpoint_frame_distance = NaN;
+    % have exactly two endpoints
+    if numel(row_end) == 2   
         endpoint_distance = hypot(col_end(1) - col_end(2), ...
                                   row_end(1) - row_end(2));
-    else
-        % warn that there is not 2 endpoints
-        % warning('num_endpts = %d)', numel(row_end));
+        
+        % find minimum distance moved from either the tail or head
+        if numel(prev_row_end) == 2
+            % first case, endpoints don't swap
+            d11 = hypot(col_end(1)-prev_col_end(1), row_end(1)-prev_row_end(1));
+            d22 = hypot(col_end(2)-prev_col_end(2), row_end(2)-prev_row_end(2));
+            % second case, endpoints swap
+            d12 = hypot(col_end(1)-prev_col_end(2), row_end(1)-prev_row_end(2));
+            d21 = hypot(col_end(2)-prev_col_end(1), row_end(2)-prev_row_end(1));
+            % min distance moved depending if endpoints swap or not
+            endpoint_frame_distance = min(d11 + d22, d12 + d21); 
+        end
+
+        prev_row_end = row_end;
+        prev_col_end = col_end;
     end
 
     skel=skel(:); % flatten into 1D
@@ -155,7 +178,11 @@ while hasFrame(vid_obj)
         area, ...
         angle, ...
         center_frame_distance, ...
-        endpoint_distance
+        endpoint_distance, ...
+        endpoint_frame_distance, ...
+        width_max, ...
+        width_mean, ...
+        width_median
     ];
     i=i+1; % go to next frame
 end
@@ -166,7 +193,9 @@ plot(features_time)
 xlabel('Frame')
 ylabel('Feature value')
 title('All features over time')
-legend('Length','Aspect ratio','Area','Angle', 'Center distance', "Endpoint distance")
+legend('Length','Aspect ratio','Area','Angle', 'Center frame distance', ...
+       'Endpoint distance', 'Endpoint frame distance', 'Width max', ...
+       'Width mean', 'Width median')
 
 for f = 1:num_features
     x = features_time(:,f);
@@ -200,8 +229,12 @@ feature_names = {
     'Aspect ratio'
     'Area'
     'Angle'
-    'Center distance'
+    'Center frame distance'
     'Endpoint distance'
+    'Endpoint frame distance'
+    'Width max'
+    'Width mean'
+    'Width median'
 };
 
 feature_stats_table = array2table( ...

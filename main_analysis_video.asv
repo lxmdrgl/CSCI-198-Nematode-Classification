@@ -112,12 +112,28 @@ while hasFrame(vid_obj)
     hold off
     
     endpoint_distance = NaN;
+    endpoint_frame_distance = NaN;
+    prev_row_end = NaN;
+    prev_col_end = NaN;
     if numel(row_end) == 2   % have exactly two endpoints
         endpoint_distance = hypot(col_end(1) - col_end(2), ...
                                   row_end(1) - row_end(2));
-    else
-        % warn that there is not 2 endpoints
-        % warning('num_endpts = %d)', numel(row_end));
+
+        % find minimum distance moved from either the tail or head
+        for j = 1:2
+            for k = 1:2
+                % compare 2 previous coords to 2 current coords
+                min_distance = hypot(col_end(j) - prev_col_end(k), ...
+                               row_end(j) - row_end(k));
+                if (isnan(endpoint_frame_distance) || ...
+                    endpoint_frame_distance > min_distance)
+                    endpoint_frame_distance = min_distance
+                end 
+            end
+        end
+
+        prev_row_end = row_end
+        prev_col_end = col_end
     end
 
     skel=skel(:); % flatten into 1D
